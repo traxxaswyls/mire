@@ -21,6 +21,7 @@
         (recur (read-line)))
     name))
 
+
 (defn- mire-handle-client [in out]
   (binding [*in* (io/reader in)
             *out* (io/writer out)
@@ -28,22 +29,37 @@
 
     ;; We have to nest this in another binding call instead of using
     ;; the one above so *in* and *out* will be bound to the socket
-    (print "\nWhat is your name? ") (flush)
+    (print "What is your name?\n") (flush)
+    (def Money 0)
     (binding [player/*name* (get-unique-player-name (read-line))
-              player/*current-room* (ref (@rooms/rooms :start))
-              player/*inventory* (ref #{})]
+              player/*current-room* (ref (@rooms/rooms :fsittingroom))
+              player/*inventory* (ref #{})
+              player/*money* (ref Money)
+              ]
       (dosync
        (commute (:inhabitants @player/*current-room*) conj player/*name*)
-       (commute player/streams assoc player/*name* *out*))
-
+       (commute player/streams assoc player/*name* *out*)
+       (commute player/health assoc player/*name* 100)
+       (commute player/score assoc player/*name* 0)
+       (commute player/lives assoc player/*name* "live"))
+       (.set player/*arrows* 0)
       (println (commands/look)) (print player/prompt) (flush)
 
       (try (loop [input (read-line)]
-             (when input
-               (println (commands/execute input))
-               (.flush *err*)
-               (print player/prompt) (flush)
-               (recur (read-line))))
+            (if (<(int (@player/health player/*name*)) 1)
+
+            (when true
+              (cleanup)
+              (println (commands/execute "deadplayer"))
+              (.flush *err*)
+              (print player/prompt) (flush)
+              (recur (read-line)))
+
+            (when input
+              (println (commands/execute input))
+              (.flush *err*)
+              (print player/prompt) (flush)
+              (recur (read-line)))))
            (finally (cleanup))))))
 
 (defn -main

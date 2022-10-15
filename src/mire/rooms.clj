@@ -9,7 +9,11 @@
            {:name (keyword (.getName file))
             :desc (:desc room)
             :exits (ref (:exits room))
+            :gold (ref (:gold room))
+            :trash (ref (:trash room))
+            :loot (ref (:loot room))
             :items (ref (or (:items room) #{}))
+            :lock (ref (or (:lock room) #{}))
             :inhabitants (ref #{})}})))
 
 (defn load-rooms
@@ -30,3 +34,15 @@
 (defn room-contains?
   [room thing]
   (@(:items room) (keyword thing)))
+
+(defn room-containslock?
+  [room lock1]
+  (@(:lock room) (keyword lock1)))
+
+(defn room-contains-gold?
+  [room thing]
+  (contains? @(:gold room) (keyword thing)))
+
+(defn room-contains-loot?
+  [room thing]
+  (contains? @(:loot room) (keyword thing)))
