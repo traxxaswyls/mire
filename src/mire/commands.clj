@@ -61,45 +61,93 @@
 (defn grab
   "Pick something up."
   [thing]
+   (dosync
+     (cond
+       (or (= thing "coin") (= thing "treasuregold") (= thing "bagmoney"))
+       (if (room-contains-gold? @*current-room* thing)
+         (do
+           (case thing
+             "coin"
+             (do (alter *money* inc) (change-points 1))
+             "bagmoney"
+             (do (alter *money* + 7) (change-points 7))
+             "treasuregold"
+             (do (alter *money* + 15) (change-points 15))
+             )
+           (if (= ((keyword thing) @(:gold @*current-room*)) 1)
+             (alter (:gold @*current-room*) dissoc (keyword thing))
+             (do
+               (def temp-gold ((keyword thing) @(:gold @*current-room*)))
+               (alter (:gold @*current-room*) dissoc (keyword thing))
+               (alter (:gold @*current-room*) assoc (keyword thing) (- temp-gold 1))
+               )
+             )
+           (str " You picked up the " thing ".")
+           )
+         (str " There isn't any " thing " here.")
+         )
+
+       (room-contains? @*current-room* thing)
+       (case thing
+         "arrows" (do
+                    (.set player/*arrows* (+ (.get player/*arrows*) 5))
+                    (move-delete (keyword thing) (:items @*current-room*))
+                    (println "You picked up arrows.")
+                    )
+         (do
+           (move-between-refs (keyword thing)
+                              (:items @*current-room*)
+                              *inventory*)
+           (str "You picked up the " thing ".")
+           )
+         )
+       :default (str "There isn't any " thing " here.")
+       )
+     )
+   )
+
+(defn grab-many
+  "Pick something up."
+  [thing count]
   (dosync
     (cond
-    (or (= thing "coin") (= thing "treasuregold") (= thing "bagmoney"))
+      (or (= thing "coin") (= thing "treasuregold") (= thing "bagmoney"))
       (if (room-contains-gold? @*current-room* thing)
         (do
           (case thing
             "coin"
-            (do (alter *money* inc) (change-points 1))
+            (do (alter *money* + (* 1 (Integer. (re-find #"\d+" count)))) (change-points (* 1 (Integer. (re-find #"\d+" count)))))
             "bagmoney"
-            (do (alter *money* + 7) (change-points 7))
-            "treasuregold"
-            (do (alter *money* + 15) (change-points 15))
-          )
-          (if (= ((keyword thing) @(:gold @*current-room*)) 1)
+            (do (alter *money* + (* 7 (Integer. (re-find #"\d+" count)))) (change-points (* 7 (Integer. (re-find #"\d+" count))))
+                "treasuregold"
+                (do (alter *money* + (* 15 (Integer. (re-find #"\d+" count)))) (change-points (* 15 (Integer. (re-find #"\d+" count))))))
+            )
+          (if (= ((keyword thing) @(:gold @*current-room*)) (Integer. (re-find #"\d+" count)))
             (alter (:gold @*current-room*) dissoc (keyword thing))
             (do
               (def temp-gold ((keyword thing) @(:gold @*current-room*)))
               (alter (:gold @*current-room*) dissoc (keyword thing))
-              (alter (:gold @*current-room*) assoc (keyword thing) (- temp-gold 1))
+              (alter (:gold @*current-room*) assoc (keyword thing) (- temp-gold (Integer. (re-find #"\d+" count))))
+              )
             )
-          )
           (str " You picked up the " thing ".")
-        )
+          )
         (str " There isn't any " thing " here.")
-      )
+        )
 
       (room-contains? @*current-room* thing)
-        (case thing
-          "arrows" (do
-            (.set player/*arrows* (+ (.get player/*arrows*) 5))
-            (move-delete (keyword thing) (:items @*current-room*))
-            (println "You picked up arrows.")
-            )
-            (do
-              (move-between-refs (keyword thing)
-                                 (:items @*current-room*)
-                                 *inventory*)
-              (str "You picked up the " thing ".")
-            )
+      (case thing
+        "arrows" (do
+                   (.set player/*arrows* (+ (.get player/*arrows*) 5))
+                   (move-delete (keyword thing) (:items @*current-room*))
+                   (println "You picked up arrows.")
+                   )
+        (do
+          (move-between-refs (keyword thing)
+                             (:items @*current-room*)
+                             *inventory*)
+          (str "You picked up the " thing ".")
+          )
         )
       :default (str "There isn't any " thing " here.")
       )
@@ -231,6 +279,27 @@
   )
 )
 
+(defn hit
+  "Hit by sword another player"
+  [target]
+  (dosync
+    (if (player/carrying? :sword)
+      (if (contains? @health target)
+        (if (contains? @(:inhabitants @*current-room*) target)
+          (do
+            (commute health assoc target (- (@health target) 50))
+            "Great hit, dude"
+            (say (str "Ohhh " target " has been damaged by -50."))
+          )
+          "No such target in the room."
+         )
+        "Target doesn't exist."
+      )
+      "You don't have a sword."
+    )
+  )
+)
+
 (defn shoot
   "Shoot another player"
   [target]
@@ -240,9 +309,10 @@
         (if (contains? @health target)
           (if (contains? @(:inhabitants @*current-room*) target)
             (do
-              (commute health assoc target (- (@health target) 50))
+              (commute health assoc target (- (@health target) 30))
               (.set player/*arrows* (- (.get player/*arrows*) 1))
-              "Great shot!"
+              "Great shot, dude!"
+              (say (str "Ohhh " target " has been damaged by -30."))
             )
             "No such target in the room."
           )
@@ -255,12 +325,76 @@
   )
 )
 
+(defn buy
+		"Buy loot from any place: sword - 7 coins"
+		[loot]
+		(dosync
+		 (if (or (= loot "sword") (= loot "bow") (= loot "arrows"))
+		 	(do
+        (case loot
+          "sword" (if (> @*money* 10)
+			            		(do
+			            		(move-between-refs (keyword loot)
+			                             		(:items @*current-room*)
+			                             		*inventory*)
+			            		(alter *money* - 10)
+			           			(str "You bought the " loot ".")
+			           			)
+			      						)
+          "bow" (if (> @*money* 7)
+			            		(do
+			            		(move-between-refs (keyword loot)
+			                             		(:items @*current-room*)
+			                             		*inventory*)
+			            		(alter *money* - 7)
+			           			(str "You bought the " loot ".")
+			           			)
+			      						 )
+    						"arrows" (if (> @*money* 1)
+			            		(do
+			            	 (.set player/*arrows* (+ (.get player/*arrows*) 5))
+			            		(alter *money* - 1)
+			           			(str "You bought the " loot ".")
+			           			)
+			      						)
+    						)
+       )
+				(str "There is no " loot " in the shop.")
+			)
+	)
+)
+
+(defn stats
+  "Get a description of stats."
+  []
+  (str
+       (join (str "health: " (@health *name*) ".\r\n"))
+       (join (str "score: " (@score *name*) ".\r\n"))
+       (join (str "live: " (@lives *name*) ".\r\n"))
+  ))
+
 ;; Command data
 (defn deadplayer
   []
   (str "You are dead \r\n"
   "You score:" (@score *name*) "\r\n"
   ))
+
+(defn seemoney
+  "See your money"
+  []
+  (str (join "\r\n" (map #(str "Money is " % " .\r\n") [(str @*money*)])))
+)
+
+(defn detect
+  "If you have the detector, you can see which room an item is in."
+  [item]
+  (if (@*inventory* :detector)
+    (if-let [room (first (filter #((:items %) (keyword item))
+                                 (vals @rooms)))]
+      (str item " is in " (:name room))
+      (str item " is not in any room."))
+    "You need to be carrying the detector for that."))
 
 (def commands
               {"move" move,
@@ -277,6 +411,13 @@
                "help" help
                "attack" attack
                "shoot" shoot
+               "buy" buy
+               "seemoney" seemoney
+               "detect" detect
+               "deadplayer" deadplayer
+               "hit" hit
+               "grab-many" grab-many
+               "stats" stats
                })
 
 ;; Command handling
