@@ -5,6 +5,8 @@
 (def ^:dynamic *name*)
 (def ^:dynamic *money*)
 (def ^:dynamic *loot*)
+(def ^:dynamic *score*)
+(def ^:dynamic *health*)
 (def ^:dynamic *arrows* (ThreadLocal.))
 
 (def damage 25)
@@ -13,6 +15,7 @@
 (def health (ref {}))
 (def score (ref {}))
 (def lives (ref {}))
+(def players-stats (ref {}))
 
 (defn carrying? [thing]
   (some #{(keyword thing)} @*inventory*))
